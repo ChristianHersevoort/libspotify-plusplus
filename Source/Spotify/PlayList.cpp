@@ -15,8 +15,9 @@
  * 
  */
 
-// std includes
+// c-lib includes
 #include <assert.h>
+#include <cstring>
 
 // local includes
 #include "Spotify/PlayList.h"
@@ -268,7 +269,7 @@ namespace Spotify
 		LOG("PlayList::OnTracksAdded [0x%08X] numTracks[%d] position[%d]", this, numTracks, position );
 	}
 
-	void PlayList::OnTracksRemoved(const int *tracks, int numTracks)
+    void PlayList::OnTracksRemoved(const int *tracks, int numTracks)
 	{
 		LOG("PlayList::OnTracksRemoved [0x%08X] numTracks[%d]",this, numTracks);
 	}

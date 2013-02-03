@@ -27,7 +27,7 @@ namespace Spotify
 		m_session = session;
 		m_artist = artist;
 
-		m_pArtistBrowse = sp_artistbrowse_create( session->m_pSession, artist->m_pArtist, callback_artistbrowse_complete, this );
+        m_pArtistBrowse = sp_artistbrowse_create( session->m_pSession, artist->m_pArtist, SP_ARTISTBROWSE_NO_TRACKS, callback_artistbrowse_complete, this );
 	}
 
 	ArtistBrowse::~ArtistBrowse()

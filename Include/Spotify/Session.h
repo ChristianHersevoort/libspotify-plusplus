@@ -59,6 +59,7 @@ namespace Spotify
 			const char*		m_cacheLocation;
 			const char*		m_settingsLocation;
 			const char*		m_userAgent;
+            const char*     m_traceFile;
 			bool			m_compressPlaylists;
 			bool			m_dontSaveMetadataForPlaylists;
 			bool			m_initiallyUnloadPlaylists;
@@ -73,7 +74,7 @@ namespace Spotify
 		
 		virtual void		Update();
 
-		virtual void		Login( const char* username, const char* password, bool rememberMe = false );
+        virtual sp_error	Login( const char* username, const char* password, bool rememberMe , const char* blob);
 		virtual void		Logout();
 		
 		virtual bool		IsLoggedIn();
@@ -103,6 +104,7 @@ namespace Spotify
 		virtual boost::shared_ptr<Artist>				CreateArtist();
 		virtual boost::shared_ptr<Album>				CreateAlbum();
 		virtual boost::shared_ptr<Image>				CreateImage();
+        virtual int GetNextTimeout();
 
 	protected:
 
@@ -126,7 +128,14 @@ namespace Spotify
 		virtual void OnUserinfoUpdated();
 		virtual void OnStartPlayback();
 		virtual void OnStopPlayback();
-		virtual void OnGetAudioBufferStats( sp_audio_buffer_stats* stats );
+        virtual void OnGetAudioBufferStats( sp_audio_buffer_stats* stats );
+        virtual void OnOfflineStatusUpdated();
+        virtual void OnOfflineError( sp_error error );
+        virtual void OnCredentialsBlobUpdated( const char* blob );
+        virtual void OnConnectionStateUpdated();
+        virtual void OnScrobbleError( sp_error error );
+        virtual void OnPrivateSessionModeChanged(bool is_private);
+
 
 	private:
 
@@ -151,12 +160,19 @@ namespace Spotify
 		static void SP_CALLCONV callback_start_playback(sp_session *session);
 		static void SP_CALLCONV callback_stop_playback(sp_session *session);
 		static void SP_CALLCONV callback_get_audio_buffer_stats(sp_session *session, sp_audio_buffer_stats *stats);
-		
+        static void SP_CALLCONV callback_offline_status_updated(sp_session *session);
+        static void SP_CALLCONV callback_offline_error(sp_session *session, sp_error error);
+        static void SP_CALLCONV callback_credentials_blob_updated(sp_session *session, const char *blob);
+        static void SP_CALLCONV callback_connectionstate_updated(sp_session *session);
+        static void SP_CALLCONV callback_scrobble_error(sp_session *session, sp_error error);
+        static void SP_CALLCONV callback_private_session_mode_changed(sp_session *session, bool is_private);
+
 		sp_session*		m_pSession;
 		
 		volatile bool	m_isProcessEventsRequired;
 
 		volatile bool	m_hasLoggedOut;
+        int m_NextTimeout;
 
 		boost::shared_ptr<Track>	m_track;		// currently playing track
 	};

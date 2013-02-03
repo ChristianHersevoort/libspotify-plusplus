@@ -17,6 +17,7 @@
 
 // c-lib includes
 #include <assert.h>
+#include <cstring>
 
 // local includes
 #include "Spotify/PlayListContainer.h"

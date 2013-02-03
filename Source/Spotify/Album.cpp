@@ -57,7 +57,7 @@ namespace Spotify
 			return boost::shared_ptr<Image>();
 		}
 
-		const byte* album_id = sp_album_cover( m_pAlbum );
+        const byte* album_id = sp_album_cover( m_pAlbum, SP_IMAGE_SIZE_NORMAL);
 		if (album_id == NULL)
 		{
 			return boost::shared_ptr<Image>();

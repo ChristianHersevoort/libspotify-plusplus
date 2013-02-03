@@ -15,6 +15,9 @@
  * 
  */
 
+// c-lib includes
+#include <cstring>
+
 // Includes
 #include "Spotify/Session.h"
 
@@ -29,7 +32,7 @@
 
 // debugging
 #include "Debug/Debug.h"
-#define LOG( msg, ... )	//Debug::PrintLine( msg, __VA_ARGS__ );
+#define LOG( msg, ... )	Debug::PrintLine(msg);
 
 namespace Spotify
 {
@@ -40,6 +43,7 @@ namespace Spotify
 		m_cacheLocation = "";
 		m_settingsLocation = "";
 		m_userAgent = "";
+        m_traceFile = "";
 		m_compressPlaylists = true;
 		m_dontSaveMetadataForPlaylists = false;
 		m_initiallyUnloadPlaylists = false;
@@ -50,7 +54,7 @@ namespace Spotify
 		return boost::shared_ptr< Session >( new Session() );
 	}
 
-	Session::Session() : m_pSession(NULL), m_isProcessEventsRequired(false), m_hasLoggedOut(NULL)
+    Session::Session() : m_pSession(NULL), m_isProcessEventsRequired(false), m_hasLoggedOut(NULL), m_NextTimeout(0)
 	{
 	}
 
@@ -62,38 +66,47 @@ namespace Spotify
 	sp_error Session::Initialise( Config& config )
 	{
 		sp_session_config spConfig;
-		
+        memset( &spConfig, 0, sizeof(spConfig) );
+
+        spConfig.proxy = "";
 		spConfig.api_version = SPOTIFY_API_VERSION;
 		
 		// app specified configuration
 		spConfig.application_key = config.m_appKey;
 		spConfig.application_key_size = config.m_appKeySize;
-		spConfig.cache_location = config.m_cacheLocation;
+		spConfig.cache_location = config.m_cacheLocation;                
 		spConfig.settings_location = config.m_settingsLocation;
+        spConfig.tracefile = config.m_traceFile;
 		spConfig.user_agent = config.m_userAgent;
 		
 		// locally specified configuration
 		sp_session_callbacks callbacks;
 		memset( &callbacks, 0, sizeof(callbacks) );
 		
-		callbacks.connection_error = callback_connection_error;
-		callbacks.end_of_track = callback_end_of_track;
-		callbacks.get_audio_buffer_stats = callback_get_audio_buffer_stats;
-		callbacks.logged_in = callback_logged_in;
-		callbacks.logged_out = callback_logged_out;
-		callbacks.log_message = callback_log_message;
-		callbacks.message_to_user = callback_message_to_user;
-		callbacks.metadata_updated = callback_metadata_updated;
-		callbacks.music_delivery = callback_music_delivery;
-		callbacks.notify_main_thread = callback_notify_main_thread;
-		callbacks.play_token_lost = callback_play_token_lost;
-		callbacks.start_playback = callback_start_playback;
-		callbacks.stop_playback = callback_stop_playback;
-		callbacks.streaming_error = callback_streaming_error;
-		callbacks.userinfo_updated = callback_userinfo_updated;
+        callbacks.logged_in = callback_logged_in;
+        callbacks.logged_out = callback_logged_out;
+        callbacks.metadata_updated = callback_metadata_updated;
+        callbacks.connection_error = callback_connection_error;
+        callbacks.message_to_user = callback_message_to_user;
+        callbacks.notify_main_thread = callback_notify_main_thread;
+        callbacks.music_delivery = callback_music_delivery;
+        callbacks.play_token_lost = callback_play_token_lost;
+        callbacks.log_message = callback_log_message;
+        callbacks.end_of_track = callback_end_of_track;
+        callbacks.streaming_error = callback_streaming_error;
+        callbacks.userinfo_updated = callback_userinfo_updated;
+        callbacks.start_playback = callback_start_playback;
+        callbacks.stop_playback = callback_stop_playback;
+        callbacks.get_audio_buffer_stats = callback_get_audio_buffer_stats;
+        callbacks.offline_status_updated = callback_offline_status_updated;
+        callbacks.offline_error = callback_offline_error;
+        callbacks.credentials_blob_updated = callback_credentials_blob_updated;
+        callbacks.connectionstate_updated = callback_connectionstate_updated;
+        callbacks.scrobble_error = callback_scrobble_error;
+        callbacks.private_session_mode_changed = callback_private_session_mode_changed;
 		
 		spConfig.callbacks = &callbacks;
-		spConfig.userdata = this;			
+        spConfig.userdata = this;
 
 		spConfig.compress_playlists = config.m_compressPlaylists;
 		spConfig.dont_save_metadata_for_playlists = config.m_dontSaveMetadataForPlaylists;
@@ -125,20 +138,21 @@ namespace Spotify
 
 	void Session::Update()
 	{
-		if (m_pSession)
+        if (m_pSession)
 		{						
 			m_isProcessEventsRequired = false;
 			
 			int nextTimeout = 0;
 			sp_session_process_events( m_pSession, &nextTimeout );
+            this->m_NextTimeout = nextTimeout;
 		}
 	}
 
-	void Session::Login( const char* username, const char* password, bool rememberMe )
+    sp_error Session::Login( const char* username, const char* password, bool rememberMe, const char* blob)
 	{				
 		m_hasLoggedOut = false;
 		
-		sp_session_login( m_pSession, username, password, rememberMe );		
+        return sp_session_login( m_pSession, username, password, rememberMe, blob);
 	}
 
 	void Session::Logout()
@@ -202,6 +216,11 @@ namespace Spotify
 	{
 		return m_track;
 	}
+
+    int Session::GetNextTimeout()
+    {
+        return m_NextTimeout;
+    }
 
 	void Session::Seek( int offset )
 	{
@@ -352,7 +371,7 @@ namespace Spotify
 
 		pSession->OnNotifyMainThread();		
 		
-		pSession->m_isProcessEventsRequired = true;		
+        pSession->m_isProcessEventsRequired = true;
 	}
 
 	int  SP_CALLCONV Session::callback_music_delivery(sp_session *session, const sp_audioformat *format, const void *frames, int num_frames)
@@ -409,9 +428,46 @@ namespace Spotify
 		pSession->OnGetAudioBufferStats( stats );
 	}
 
+    void SP_CALLCONV Session::callback_offline_status_updated(sp_session *session)
+    {
+        Session* pSession = GetSessionFromUserdata( session );
+        pSession->OnOfflineStatusUpdated();
+    }
+
+    void SP_CALLCONV Session::callback_offline_error(sp_session *session, sp_error error)
+    {
+        Session* pSession = GetSessionFromUserdata( session );
+        pSession->OnOfflineError(error);
+    }
+
+    void SP_CALLCONV Session::callback_credentials_blob_updated(sp_session *session, const char *blob)
+    {
+        Session* pSession = GetSessionFromUserdata( session );
+        pSession->OnCredentialsBlobUpdated(blob);
+    }
+
+    void SP_CALLCONV Session::callback_connectionstate_updated(sp_session *session)
+    {
+        Session* pSession = GetSessionFromUserdata( session );
+        pSession->OnConnectionStateUpdated();
+    }
+
+    void SP_CALLCONV Session::callback_scrobble_error(sp_session *session, sp_error error)
+    {
+        Session* pSession = GetSessionFromUserdata( session );
+        pSession->OnScrobbleError(error);
+    }
+
+    void SP_CALLCONV Session::callback_private_session_mode_changed(sp_session *session, bool is_private)
+    {
+        Session* pSession = GetSessionFromUserdata( session );
+        pSession->OnPrivateSessionModeChanged(is_private);
+    }
+
+
 	void Session::OnLoggedIn( sp_error error )
 	{
-		LOG("Session::OnLoggedIn");
+        LOG("Session::OnLoggedIn");
 	}
 
 	void Session::OnLoggedOut()
@@ -488,5 +544,34 @@ namespace Spotify
 	{
 		LOG("Session::OnGetAudioBufferStats");
 	}
-	
+
+    void Session::OnOfflineStatusUpdated()
+    {
+        LOG("Session::OnOfflineStatusUpdated");
+    }
+
+    void Session::OnOfflineError( sp_error error )
+    {
+        LOG("Session::OnOfflineError");
+    }
+
+    void Session::OnCredentialsBlobUpdated( const char* blob )
+    {
+        LOG("Session::OnCredentialsBlobUpdated");
+    }
+
+    void Session::OnConnectionStateUpdated()
+    {
+        LOG("Session::OnConnectionStateUpdated");
+    }
+
+    void Session::OnScrobbleError( sp_error error )
+    {
+        LOG("Session::OnScrobbleError");
+    }
+
+    void Session::OnPrivateSessionModeChanged(bool is_private)
+    {
+        LOG("Session::OnPrivateSessionModeChanged");
+    }
 }

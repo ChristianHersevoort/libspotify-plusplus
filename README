@@ -4,14 +4,12 @@ ABOUT
 C++ wrapper for the libspotify api provided by spotify.
 
 Dependencies
-- libspotify 0.0.8 (as provided by spotify)
+- libspotify 12.1.51 (as provided by spotify)
 - boost c++ libraries
 
 
 TODO (unordered collection of ideas for forthcoming work)
 ---------------------------
-
-Update for libspotify 9
 
 Spotify/Disc
  - be able to ask an album for the number of discs that it contains
